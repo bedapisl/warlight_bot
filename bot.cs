@@ -1,14 +1,11 @@
 
 
-#define FILE
+//#define FILE
 
 using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Text;
-//using System.Linq;
-
-
 
 namespace warlight
 {
@@ -136,11 +133,14 @@ namespace warlight
 				{
 					best_effectivity = effectivity;
 					best_index = i;
+					Utils.error_output("best region: " + regions_to_choose[best_index]);
 				}
 			}
-
+			
 			int chosen = regions_to_choose[best_index];
 			Console.WriteLine(chosen);	
+			Utils.error_output("chosen region: " + chosen);
+
 			MapClass.regions[chosen].owner = OwnerEnum.Me;
 			MapClass.regions[chosen].number_of_armies = 2;
 		}
@@ -388,32 +388,78 @@ namespace warlight
 			return l;
 		}
 
+		public static List<int> neighbors_by_predicate(int region, Func<int, bool> predicate)
+		{
+			List<int> l = new List<int>();
+			foreach(int neighbor in neighbors(region))
+			{
+				if(predicate(neighbor))
+					l.Add(neighbor);
+			}
+			return l;
+		}
+		
 		public static List<int> my_neighbors(int region)
 		{
-			List<int> l = neighbors(region);
-			List<int> m = new List<int>();
-			foreach(int neighbor in l)
-			{
-				if(regions[neighbor].owner == OwnerEnum.Me)
-				{
-					m.Add(neighbor);
-				}
-			}
-			return m;
+			return neighbors_by_predicate(region, r => MapClass.regions[r].owner == OwnerEnum.Me);
 		}
 			
 		public static List<int> enemy_neighbors(int region)
 		{
-			List<int> l = neighbors(region);
-			List<int> m = new List<int>();
-			foreach(int neighbor in l)
+			return neighbors_by_predicate(region, r => MapClass.regions[r].owner == OwnerEnum.Enemy);
+		}
+		
+		public static int path_to_enemy(int start) 		//returns start if enemy is adjacent, else returns first region of path to some enemy
+		{							//if no path can be found, return -1
+			return bfs(start, r => enemy_neighbors(r).Count > 0);
+		}
+
+		public static int path_to_neutral(int start)		//similar output as path_to_enemy()
+		{
+			return bfs(start, r => my_neighbors(r).Count > 0);
+		}
+
+		public static int bfs(int start, Func<int, bool> goal_test)
+		{
+			if(goal_test(start))
+				return start;
+
+			List<Tuple<int, int>> frontier = new List<Tuple<int, int>>();		//current region, first region of path
+			List<bool> explored = new List<bool>();
+			for(int i=0; i<MapClass.regions.Count; ++i)
 			{
-				if(regions[neighbor].owner == OwnerEnum.Enemy)
+				explored.Add(false);
+			}
+			explored[start] = true;
+
+			foreach(int my_neighbor in MapClass.my_neighbors(start))
+			{
+				frontier.Add(new Tuple<int, int>(my_neighbor, my_neighbor));
+				explored[my_neighbor] = true;
+			}
+			
+			int index = 0;
+
+			while(frontier.Count > index)
+			{
+				if(goal_test(frontier[index].Item1))	//found path to enemy
+					return frontier[index].Item2;
+
+				else
 				{
-					m.Add(neighbor);
+					List<int> neighbors = MapClass.my_neighbors(frontier[index].Item1);
+					foreach(int region in neighbors)
+					{
+						if(!explored[region])
+						{
+							frontier.Add(new Tuple<int, int>(region, frontier[index].Item2));
+							explored[region] = true;
+						}
+					}
+					index++;
 				}
 			}
-			return m;
+			return -1;
 		}
 
 		public static List<Tuple<int, int>> existing_armies()
@@ -425,6 +471,20 @@ namespace warlight
 				{
 					armies.Add(new Tuple<int, int>(i, regions[i].number_of_armies - 1));
 				}
+			}
+			return armies;
+		}
+
+		public static List<int> free_armies_by_region()
+		{
+			List<int> armies = new List<int>();
+			for(int i=1; i<MapClass.regions.Count; ++i)
+			{
+				if(MapClass.regions[i].owner == OwnerEnum.Me)
+					armies.Add(MapClass.regions[i].number_of_armies - 1);
+				
+				else
+					armies.Add(0);
 			}
 			return armies;
 		}
@@ -482,7 +542,7 @@ namespace warlight
 		private static TextWriter error_writer = Console.Error;
 
 		#if FILE
-		public static StreamReader reader = new StreamReader("/home/beda/c_sharp/warlight/match_10_start");
+		public static StreamReader reader = new StreamReader("/home/beda/c_sharp/warlight/test4");
 		#endif
 	}
 }
